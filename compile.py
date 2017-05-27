@@ -9,19 +9,20 @@ try:
 except ImportError:
     from distutils.core import setup
     from distutils.extension import Extension
+from Cython.Build import cythonize
+
 
 setup(
   name = 'cagent',
-  ext_modules=[
+  ext_modules=cythonize([
     Extension('cagent', ['cagent.pyx'],
-                # language="c++",
-                # libraries=["stdc++"]
+                 libraries=["zmq"],
                 ),
     Extension('processorgroup', ['processorgroup.pyx'],
-                # language="c++",
-                # libraries=["stdc++"]
-                include_dirs=[numpy.get_include()],
-                )],
+                 libraries=["zmq"],
+                 include_dirs=[numpy.get_include()],
+                ),
+              ]),
   cmdclass = {'build_ext': build_ext}
 )
 
