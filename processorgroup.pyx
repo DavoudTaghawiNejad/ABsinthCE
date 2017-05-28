@@ -135,12 +135,12 @@ cdef class ProcessorGroup:
             if rc != EINTR:
                 break
         rc = zmq_msg_close(&data)
-        print('end - send', self.batch)
 
     def send(self):
         for id in range(self.num_agents):
             name = b"%05i_%i" % (id, self.batch)
             self.send_(name)
+        print('end - send', self.batch)
 
     def messaging(self):
         cdef int num_agents = len(self.agents)

@@ -83,8 +83,8 @@ cdef class CAgent:
         data_c = <char *>zmq_msg_data(&zmq_msg)
         data_len_c = zmq_msg_size(&zmq_msg)
         zmq_msg_close(&zmq_msg)
-        with gil:
-            print(data_len_c, data_c[0], data_c[1], data_c[2])
+        #with gil:
+        #    print(data_len_c, data_c[0], data_c[1], data_c[2])
 
     def __del__(self):
         pass

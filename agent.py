@@ -4,4 +4,5 @@ class Agent:
         self.batch = batch
 
     def go(self):
-        print('go python agent ', self.id, self.batch)
+        if self.id == 0:
+            print('go python agent 0', self.batch)
