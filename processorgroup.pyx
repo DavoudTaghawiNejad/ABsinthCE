@@ -84,7 +84,7 @@ cdef class ProcessorGroup:
 
         self.context = <object>zmq_ctx_new()
         rc = zmq_ctx_set(<void *>self.context, ZMQ_IO_THREADS, io_threads)
-        self._max_sockets = 200
+        self._max_sockets = num_agents + 1
 
         self._sockets = <void **>malloc(self._max_sockets*sizeof(void *))
         if self._sockets == NULL:
