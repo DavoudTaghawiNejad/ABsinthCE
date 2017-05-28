@@ -43,17 +43,14 @@ cdef class CAgent:
         name = "%05i_%i" % (self.id, self.batch)
 
         self.receiver = zmq_socket(context, ZMQ_DEALER)
+        assert self.receiver != NULL, "self.receiver != NULL"
 
-        while True:
-            sprintf (identity, name);
-            rc = zmq_setsockopt (self.receiver, ZMQ_IDENTITY, identity, strlen (identity))
-            if rc != -1:
-                break
+        sprintf (identity, name);
+        rc = zmq_setsockopt (self.receiver, ZMQ_IDENTITY, identity, strlen (identity))
+        assert rc != -1, "zmq_setsockopt"
 
-        while True:
-            rc = zmq_connect(self.receiver, addr)
-            if rc != -1:
-                break
+        rc = zmq_connect(self.receiver, addr)
+        assert rc != -1, "zmq_connect"
         #self._pid = getpid()
         return self.receiver
 
@@ -65,9 +62,11 @@ cdef class CAgent:
         cdef int rc
         cdef char data_c [256]
 
+
         rc = zmq_recv(self.receiver, data_c, 255, flags=0)
 
         with gil:
+            assert rc != -1, "zmq_recv"
             print(self.id, data_c)
 
     def __del__(self):
