@@ -4,8 +4,8 @@ from agent import Agent
 
 cdef class CAgent:
     cdef object agent
-    cdef object id
-    cdef object batch
+    cdef int id
+    cdef int batch
     cdef char *name
 
     cdef int _max_sockets
