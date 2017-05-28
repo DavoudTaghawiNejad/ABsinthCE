@@ -18,12 +18,15 @@ cdef extern from "zmq.h" nogil:
     enum: ZMQ_ROUTER
     enum: ZMQ_IO_THREADS
     enum: ZMQ_SNDMORE
+    enum: ZMQ_MAX_SOCKETS
+    enum: ZMQ_SOCKET_LIMIT
 
     int zmq_send (void *socket, void *buf, size_t len, int flags)
     void *zmq_ctx_new ()
     int zmq_ctx_set (void *context, int option, int optval)
     void *zmq_socket (void *context, int type)
     int zmq_bind (void *s, char *addr)
+    int zmq_ctx_get (void *context, int option_name)
 
 cdef extern from "Python.h":  # python 3
     int PY_MAJOR_VERSION
@@ -81,8 +84,13 @@ cdef class ProcessorGroup:
 
         self.context = zmq_ctx_new()
 
-        rc = zmq_ctx_set(self.context, ZMQ_IO_THREADS, io_threads)
-        self._max_sockets = num_agents + 1
+        print('ZMQ_SOCKET_LIMIT', zmq_ctx_get(self.context, ZMQ_SOCKET_LIMIT))
+
+        rc = zmq_ctx_set(self.context, ZMQ_IO_THREADS, 0)
+        assert rc == 0
+        rc = zmq_ctx_set(self.context, ZMQ_MAX_SOCKETS, 65530)
+        assert rc == 0
+        self._max_sockets = 65530
 
         self._sockets = <void **>malloc(self._max_sockets*sizeof(void *))
         if self._sockets == NULL:
