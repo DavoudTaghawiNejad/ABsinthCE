@@ -74,6 +74,7 @@ cdef class ProcessorGroup:
     def __init__(self, num_processors, batch, num_agents):
         cdef int rc
         cdef int io_threads = 1
+
         self.num_processors = num_processors
         self.batch = batch
         self.num_agents = num_agents
@@ -99,7 +100,7 @@ cdef class ProcessorGroup:
         #self._pid = getpid()
 
         self.agents = numpy.empty(num_agents, dtype='object')
-        cdef CAgent agents
+        #cdef CAgent agents
 
         for i in range(num_agents):
             agent = CAgent(i, batch, self.context)
@@ -127,13 +128,12 @@ cdef class ProcessorGroup:
             if rc != EINTR:
                 break
         rc = zmq_msg_close(&data)
-        print('end - send')
+        print('end - send', self.batch)
 
     def send(self):
         for id in range(self.num_agents):
             name = b"%05i_%i" % (id, self.batch)
             self.send_(name)
-            print('send', name)
 
     def messaging(self):
         cdef int num_agents = len(self.agents)
