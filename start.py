@@ -20,7 +20,7 @@ for i in range(processes):
     manager = MyManager()
     manager.start()
     managers.append(manager)
-    pg = manager.ProcessorGroup(processes, batch=i, num_agents=100000)
+    pg = manager.ProcessorGroup(processes, batch=i, num_agents=1000)
     _processor_groups.append(pg)
 
 

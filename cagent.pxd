@@ -6,7 +6,7 @@ cdef class CAgent:
     cdef object agent
     cdef int id
     cdef int batch
-    cdef char *name
+
 
     cdef int _max_sockets
 

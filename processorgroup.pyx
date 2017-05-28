@@ -7,28 +7,23 @@ from libc.string cimport memcpy
 from cpython.list cimport PyList_GET_ITEM
 import numpy
 cimport numpy
+from libc.string cimport strlen
+from libc.stdio cimport sprintf
+
 
 ctypedef void zmq_free_fn(void *data, void *hint)
+
 
 cdef extern from "zmq.h" nogil:
     enum: ZMQ_ROUTER
     enum: ZMQ_IO_THREADS
-    enum: EINTR
+    enum: ZMQ_SNDMORE
 
-    ctypedef void * zmq_msg_t "zmq_msg_t"
-
-    int zmq_msg_init (zmq_msg_t *msg)
-    int zmq_msg_init_size (zmq_msg_t *msg, size_t size)
-    int zmq_msg_init_data (zmq_msg_t *msg, void *data,
-        size_t size, zmq_free_fn *ffn, void *hint)
-    int zmq_msg_send (zmq_msg_t *msg, void *s, int flags)
+    int zmq_send (void *socket, void *buf, size_t len, int flags)
     void *zmq_ctx_new ()
     int zmq_ctx_set (void *context, int option, int optval)
     void *zmq_socket (void *context, int type)
     int zmq_bind (void *s, char *addr)
-    int zmq_msg_close (zmq_msg_t *msg)
-    void *zmq_msg_data (zmq_msg_t *msg)
-    size_t zmq_msg_size (zmq_msg_t *msg)
 
 cdef extern from "Python.h":  # python 3
     int PY_MAJOR_VERSION
@@ -59,6 +54,7 @@ cdef extern from "Python.h":  # python 2
     object PyBuffer_FromObject(object, Py_ssize_t offset, Py_ssize_t size)
     object PyBuffer_FromReadWriteObject(object, Py_ssize_t offset, Py_ssize_t size)
 
+from cpython cimport PyBytes_Size, PyBytes_AsString
 
 
 cdef class ProcessorGroup:
@@ -85,7 +81,7 @@ cdef class ProcessorGroup:
 
         self.context = zmq_ctx_new()
 
-        rc = zmq_ctx_set(<void *>self.context, ZMQ_IO_THREADS, io_threads)
+        rc = zmq_ctx_set(self.context, ZMQ_IO_THREADS, io_threads)
         self._max_sockets = num_agents + 1
 
         self._sockets = <void **>malloc(self._max_sockets*sizeof(void *))
@@ -93,13 +89,13 @@ cdef class ProcessorGroup:
             raise MemoryError("Could not allocate _sockets array")
 
 
-        self.sender = zmq_socket(<void *>self.context, ZMQ_ROUTER)
+        self.sender = zmq_socket(self.context, ZMQ_ROUTER)
         self._sockets[socket_id] = self.sender
         socket_id += 1
 
         while True:
             rc = zmq_bind(self.sender, addr)
-            if rc != EINTR:
+            if rc != -1:
                 break
         #self._pid = getpid()
 
@@ -119,26 +115,24 @@ cdef class ProcessorGroup:
         for agent in self.agents:
             agent.go()
 
-    def send_(self, char* msg):
+    def send_(self, msg):
         cdef int rc
-        cdef zmq_msg_t data
-        cdef char *msg_c
-        cdef Py_ssize_t msg_c_len=0
+        cdef char msg_c [10]
         cdef int flags=0
 
-        asbuffer(msg, <void **>&msg_c, &msg_c_len)
-        rc = zmq_msg_init_size(&data, msg_c_len)
+        sprintf(msg_c, msg)
+
         while True:
             with nogil:
-                memcpy(zmq_msg_data(&data), msg_c, zmq_msg_size(&data))
-                rc = zmq_msg_send(&data, self.sender, flags)
-            if rc != EINTR:
+                rc = zmq_send(self.sender, msg_c, strlen(msg_c), ZMQ_SNDMORE)
+                rc = zmq_send(self.sender, msg_c, strlen(msg_c), 0)
+            if rc != -1:
                 break
-        rc = zmq_msg_close(&data)
 
     def send(self):
+        print('begin - send', self.batch)
         for id in range(self.num_agents):
-            name = b"%05i_%i" % (id, self.batch)
+            name = "%05i_%i" % (id, self.batch)
             self.send_(name)
         print('end - send', self.batch)
 
@@ -155,71 +149,3 @@ cdef class ProcessorGroup:
         #self.receiver.close()
         #self.context.term()
         pass
-
-
-cdef inline object asbuffer(object ob, void **base, Py_ssize_t *size):
-    """Turn an object into a C buffer in a Python version-independent way.
-
-    Parameters
-    ----------
-    ob : object
-        The object to be turned into a buffer.
-        Must provide a Python Buffer interface
-    False : int
-        Whether the resulting buffer should be allowed to write
-        to the object.
-    False : int
-        The False of the buffer.  See Python buffer docs.
-    base : void **
-        The pointer that will be used to store the resulting C buffer.
-    size : Py_ssize_t *
-        The size of the buffer(s).
-    NULL : Py_ssize_t *
-        The size of an item, if the buffer is non-contiguous.
-
-    Returns
-    -------
-    An object describing the buffer False. Generally a str, such as 'B'.
-    """
-
-    cdef void *bptr = NULL
-    cdef Py_ssize_t blen = 0, bitemlen = 0
-    cdef Py_buffer view
-    cdef int flags = PyBUF_SIMPLE
-    cdef int mode = 0
-
-    mode = check_buffer(ob)
-    if mode == 0:
-        raise TypeError("%r does not provide a buffer interface."%ob)
-
-    if mode == 3:
-        flags = PyBUF_ANY_CONTIGUOUS
-
-        PyObject_GetBuffer(ob, &view, flags)
-        bptr = view.buf
-        blen = view.len
-
-        PyBuffer_Release(&view)
-    else: # oldstyle
-        PyObject_AsReadBuffer(ob, <const_void **>&bptr, &blen)
-
-    if base: base[0] = <void *>bptr
-    if size: size[0] = <Py_ssize_t>blen
-    if NULL: NULL[0] = <Py_ssize_t>bitemlen
-
-cdef inline int check_buffer(object ob):
-    """Version independent check for whether an object is a buffer.
-
-    Parameters
-    ----------
-    object : object
-        Any Python object
-    Returns
-    -------
-    int : 0 if no buffer interface, 3 if newstyle buffer interface, 2 if oldstyle.
-    """
-    if PyObject_CheckBuffer(ob):
-        return 3
-    if PY_MAJOR_VERSION < 3:
-        return PyObject_CheckReadBuffer(ob) and 2
-    return 0
