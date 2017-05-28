@@ -11,8 +11,10 @@ cdef class CAgent:
     cdef int _max_sockets
 
     cdef void *receiver
-    cdef object context
+    cdef void *context
     cdef void *_sockets
+
+    cdef void *register_socket(self, void *context)
 
     cdef void go(self)
     cdef void messaging(self) nogil

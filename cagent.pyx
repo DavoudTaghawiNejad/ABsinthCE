@@ -33,23 +33,25 @@ from cpython cimport PyBytes_Size
 from libc.stdio cimport printf
 
 cdef class CAgent:
-    def __cinit__(self, id, batch, context):
+    def __cinit__(self, id, batch):
         cdef int rc
-
         self.agent = Agent(id, batch)
         self.id = id
         self.batch = batch
 
         name = b"%05i_%i" % (self.id, self.batch)
         self.name = name
-        print('name', self.name)
+        #print('name', self.name)
 
-        a = b"inproc://server%i" % batch
+    cdef void *register_socket(self, void *context):
+
+        a = b"inproc://server%i" % self.batch
         cdef char* addr = a
 
         self.context = context
 
-        self.receiver = zmq_socket(<void *>self.context, ZMQ_DEALER)
+        self.receiver = zmq_socket(self.context, ZMQ_DEALER)
+
         while True:
             rc = zmq_setsockopt(self.receiver, ZMQ_IDENTITY, self.name, PyBytes_Size(self.name))
             if rc != EINTR:
@@ -60,6 +62,9 @@ cdef class CAgent:
             if rc != EINTR:
                 break
         #self._pid = getpid()
+
+        return self.receiver
+
 
     cdef void go(self):
         self.agent.go()
@@ -79,7 +84,7 @@ cdef class CAgent:
         data_len_c = zmq_msg_size(&zmq_msg)
         zmq_msg_close(&zmq_msg)
         with gil:
-            print(data_len_c, data_c[0], chr(data_c[1]), chr(data_c[2]))
+            print(data_len_c, data_c[0], data_c[1], data_c[2])
 
     def __del__(self):
         pass

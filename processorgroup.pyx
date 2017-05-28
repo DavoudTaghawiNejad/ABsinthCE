@@ -67,13 +67,14 @@ cdef class ProcessorGroup:
     cdef int batch
     cdef int _max_sockets
     cdef void *sender
-    cdef object context
-    cdef void *_sockets
+    cdef void *context
+    cdef void **_sockets
     cdef int num_agents
 
     def __init__(self, num_processors, batch, num_agents):
         cdef int rc
         cdef int io_threads = 1
+        cdef int socket_id = 0
 
         self.num_processors = num_processors
         self.batch = batch
@@ -82,7 +83,8 @@ cdef class ProcessorGroup:
         a = b"inproc://server%i" % batch
         cdef char* addr = a
 
-        self.context = <object>zmq_ctx_new()
+        self.context = zmq_ctx_new()
+
         rc = zmq_ctx_set(<void *>self.context, ZMQ_IO_THREADS, io_threads)
         self._max_sockets = num_agents + 1
 
@@ -92,6 +94,8 @@ cdef class ProcessorGroup:
 
 
         self.sender = zmq_socket(<void *>self.context, ZMQ_ROUTER)
+        self._sockets[socket_id] = self.sender
+        socket_id += 1
 
         while True:
             rc = zmq_bind(self.sender, addr)
@@ -103,7 +107,10 @@ cdef class ProcessorGroup:
         #cdef CAgent agents
 
         for i in range(num_agents):
-            agent = CAgent(i, batch, self.context)
+            agent = CAgent(i, batch)
+            socket = agent.register_socket(self.context)
+            self._sockets[socket_id] = socket
+            socket_id += 1
             self.agents[i] = agent
 
     def execute(self):
