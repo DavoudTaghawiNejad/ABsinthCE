@@ -90,6 +90,7 @@ cdef class ProcessorGroup:
         assert rc == 0
         rc = zmq_ctx_set(self.context, ZMQ_MAX_SOCKETS, 65530)
         assert rc == 0
+        print('ZMQ_MAX_SOCKETS', zmq_ctx_get(self.context, ZMQ_MAX_SOCKETS))
         self._max_sockets = 65530
 
         self._sockets = <void **>malloc(self._max_sockets*sizeof(void *))
