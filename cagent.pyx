@@ -47,14 +47,17 @@ cdef class CAgent:
 
         self.receiver = zmq_socket(context, ZMQ_DEALER)
         if self.receiver == NULL:
-            print("zmq_socket", zmq_strerror(zmq_errno()))
+            raise Exception("zmq_socket " + name + zmq_strerror(zmq_errno()))
 
         sprintf (identity, name);
-        rc = zmq_setsockopt (self.receiver, ZMQ_IDENTITY, identity, strlen (identity))
-        assert rc != -1, "zmq_setsockopt"
+        rc = zmq_setsockopt(self.receiver, ZMQ_IDENTITY, identity, strlen(identity))
+        if rc != 0:
+            raise Exception("zmq_setsockopt " + name + zmq_strerror(zmq_errno()))
 
         rc = zmq_connect(self.receiver, addr)
-        assert rc != -1, "zmq_connect"
+        if rc != 0:
+            raise Exception("zmq_connect " + name + zmq_strerror(zmq_errno()))
+
         #self._pid = getpid()
         return self.receiver
 
