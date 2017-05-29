@@ -19,6 +19,8 @@ cdef extern from "zmq.h" nogil:
     void *zmq_socket (void *context, int type)
     int zmq_connect (void *s, char *addr)
     int zmq_setsockopt (void *s, int option, void *optval, size_t optvallen)
+    int zmq_errno()
+    char* zmq_strerror(int errnum)
 
 from cpython cimport PyBytes_Size, PyBytes_AsString
 
@@ -42,8 +44,10 @@ cdef class CAgent:
 
         name = "%05i_%i" % (self.id, self.batch)
 
+
         self.receiver = zmq_socket(context, ZMQ_DEALER)
-        assert self.receiver != NULL, "self.receiver != NULL"
+        if self.receiver == NULL:
+            print("zmq_socket", zmq_strerror(zmq_errno()))
 
         sprintf (identity, name);
         rc = zmq_setsockopt (self.receiver, ZMQ_IDENTITY, identity, strlen (identity))
