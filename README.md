@@ -16,3 +16,5 @@ What I have learned from the two implementation is that the time giver concept i
 In the fare future project Absinth should definitely be taken up. The code could be designed in such a way that it comes in a separate package, so that abce's installation remains simple.Then one could replace 'import abce.Simulation' with 'import abce_hpc.Simulation' and run ABCE in high performance mode on a linux server or super computer.
 
 In conclusion we have close to a proof that ABCE could be adapted to high performance computing in C, so ABCE will not fall on its face as predicted by some. In practice however this modifications would make the code much more complicated which with the current man power is not maintainable. The current development branch is pretty elegant and message passing takes less than 100 lines in python. 
+
+![ABCE_pyZMQ_messaging.jpg](ABCE_pyZMQ_messaging.jpg)
