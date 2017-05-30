@@ -42,14 +42,15 @@ cdef class CAgent:
 
         self.context = context
 
-        name = "%05i_%i" % (self.id, self.batch)
+
+        sprintf (identity, "%05i_%i", self.id, self.batch)
+        name = identity
 
 
         self.receiver = zmq_socket(context, ZMQ_DEALER)
         if self.receiver == NULL:
             raise Exception("zmq_socket " + name + zmq_strerror(zmq_errno()))
 
-        sprintf (identity, name);
         rc = zmq_setsockopt(self.receiver, ZMQ_IDENTITY, identity, strlen(identity))
         if rc != 0:
             raise Exception("zmq_setsockopt " + name + zmq_strerror(zmq_errno()))

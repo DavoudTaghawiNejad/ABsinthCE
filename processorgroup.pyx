@@ -124,25 +124,25 @@ cdef class ProcessorGroup:
         for agent in self.agents:
             agent.go()
 
-    def send_(self, msg):
+    cdef void send_(self, int id, int batch) nogil:
         cdef int rc
-        cdef char msg_c [10]
+        cdef char name [10]
         cdef int flags=0
 
-        sprintf(msg_c, msg)
+        sprintf(name, "%05i_%i", id, batch)
 
         while True:
-            with nogil:
-                rc = zmq_send(self.sender, msg_c, strlen(msg_c), ZMQ_SNDMORE)
-                rc = zmq_send(self.sender, msg_c, strlen(msg_c), 0)
+            rc = zmq_send(self.sender, name, strlen(name), ZMQ_SNDMORE)
+            rc = zmq_send(self.sender, name, strlen(name), 0)
             if rc != -1:
                 break
 
     def send(self):
         print('begin - send', self.batch)
-        for id in range(self.num_agents):
-            name = "%05i_%i" % (id, self.batch)
-            self.send_(name)
+        cdef int id
+        with nogil:
+            for id in prange(self.num_agents):
+               self.send_(id, self.batch)
         print('end - send', self.batch)
 
     def messaging(self):
