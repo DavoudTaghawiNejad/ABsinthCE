@@ -73,9 +73,11 @@ cdef class CAgent:
 
         rc = zmq_recv(self.receiver, data_c, 255, flags=0)
 
-        with gil:
-            assert rc != -1, "zmq_recv"
-            print(self.id, data_c)
+
+        if self.id % 10000 == 0 or self.id < 10:
+            with gil:
+                assert rc != -1, "zmq_recv"
+                print(self.id, data_c)
 
     def __del__(self):
         pass
