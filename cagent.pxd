@@ -2,6 +2,7 @@ cdef class CAgent:
     cdef object agent
     cdef int id
     cdef int batch
+    cdef int num_processes
 
     cdef void *receiver
     cdef void *sender

@@ -29,11 +29,14 @@ cdef extern from "zmq.h" nogil:
 from cpython cimport PyBytes_Size, PyBytes_AsString
 
 cdef class CAgent:
-    def __cinit__(self, id, batch):
+    def __cinit__(self, id, batch, num_processes):
         cdef int rc
         self.agent = Agent(id, batch)
         self.id = id
         self.batch = batch
+        self.num_processes = num_processes
+
+
 
 
     cdef void register_socket(self, void *in_context, void *sender):
@@ -72,8 +75,8 @@ cdef class CAgent:
         cdef char name [12]
         cdef int flags=0
 
-        sprintf(processor_group_name, "%05i", (self.batch + 1) % 3)
-        sprintf(name, "%05i_%05i", self.id, (self.batch + 1) % 3)
+        sprintf(processor_group_name, "%05i", (self.batch + 1) % self.num_processes)
+        sprintf(name, "%05i_%05i", self.id, (self.batch + 1) % self.num_processes)
 
         rc = zmq_send(self.sender, processor_group_name, strlen(processor_group_name), ZMQ_SNDMORE)
         if rc == -1:
@@ -84,7 +87,6 @@ cdef class CAgent:
         rc = zmq_send(self.sender, "aayyxx", strlen("aayyxx"), 0)
         if rc == -1:
                 raise Exception("zmq_send 2 %i_%i " % (self.batch, self.id) + zmq_strerror(zmq_errno()))
-        print self.id, self.batch
 
     cdef void recv(self) nogil:
         cdef int rc
@@ -93,10 +95,9 @@ cdef class CAgent:
 
         rc = zmq_recv(self.receiver, data_c, 255, flags=0)
 
-        with gil:
-            assert rc != -1, "zmq_recv"
-            print(self.id, data_c)
-            print('heer')
+        #with gil:
+        #    assert rc != -1, "zmq_recv"
+        #    print('heer', self.id, data_c)
 
 
     def __del__(self):

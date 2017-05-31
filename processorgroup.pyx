@@ -47,65 +47,72 @@ cdef extern from "zmq.h" nogil:
 
 
 cdef class ProcessorGroup:
-    def __init__(self, num_processors, batch, num_agents):
+    def __init__(self, batch, num_agents, num_processes):
         cdef int rc
         cdef int io_threads = 1
         cdef char identity [6]
-        cdef char *addr
+        cdef char *inproc_addr
+        cdef char *ipc_addr
 
         self.i = 0
 
-
-        self.num_processors = num_processors
         self.batch = batch
         self.num_agents = num_agents
+        self.num_processes = num_processes
 
-        a = b"inproc://server%i" % batch
-        addr = a
 
+        # print('ZMQ_SOCKET_LIMIT', zmq_ctx_get(self.in_context, ZMQ_SOCKET_LIMIT))
+        # rc = zmq_ctx_set(self.in_context, ZMQ_IO_THREADS, 0)
+        # assert rc == 0
+        # rc = zmq_ctx_set(self.in_context, ZMQ_MAX_SOCKETS, 65530)
+        # assert rc == 0
+        # rc = zmq_ctx_set(self.out_context, ZMQ_IO_THREADS, 0)
+        # assert rc == 0
+        # rc = zmq_ctx_set(self.out_context, ZMQ_MAX_SOCKETS, 65530)
+        # assert rc == 0
+
+
+        inproc = b"inproc://server%i" % batch
+        inproc_addr = inproc
         self.in_context = zmq_ctx_new()
-        self.out_context = zmq_ctx_new()
-
-        print('ZMQ_SOCKET_LIMIT', zmq_ctx_get(self.in_context, ZMQ_SOCKET_LIMIT))
-
-        rc = zmq_ctx_set(self.in_context, ZMQ_IO_THREADS, 0)
-        assert rc == 0
-        rc = zmq_ctx_set(self.in_context, ZMQ_MAX_SOCKETS, 65530)
-        assert rc == 0
-        rc = zmq_ctx_set(self.out_context, ZMQ_IO_THREADS, 0)
-        assert rc == 0
-        rc = zmq_ctx_set(self.out_context, ZMQ_MAX_SOCKETS, 65530)
-        assert rc == 0
-
         self.in_from_the_world = zmq_socket(self.in_context, ZMQ_DEALER)
         if self.in_from_the_world == NULL:
             raise Exception("zmq_socket out_socket" + zmq_strerror(zmq_errno()))
-        print(self.batch)
-        sprintf(identity, "%05i", self.batch)
         rc = zmq_setsockopt(self.in_from_the_world, ZMQ_IDENTITY, identity, strlen(identity))
         if rc != 0:
             raise Exception("zmq_setsockopt processor identity" + zmq_strerror(zmq_errno()))
-        rc = zmq_bind(self.in_from_the_world, addr)
+        rc = zmq_bind(self.in_from_the_world, inproc_addr)
         assert rc == 0
+
+
+        ipc = b"ipc://server%i" % batch
+        ipc_addr = ipc
+        self.out_context = zmq_ctx_new()
         self.out_socket = zmq_socket(self.out_context, ZMQ_ROUTER)
-        rc = zmq_bind(self.out_socket, addr)
+        rc = zmq_bind(self.out_socket, ipc_addr)
         assert rc == 0
 
         self.agents = numpy.empty(num_agents, dtype='object')
         #cdef CAgent agents
 
         for i in range(num_agents):
-            agent = CAgent(i, batch)
+            agent = CAgent(i, batch, num_processes)
             socket = agent.register_socket(self.in_context, self.out_socket)
             self.agents[i] = agent
+
+    def get_batch(self):
+        return self.batch
 
     def register_socket(self, pg):
         cdef char identity [6]
         cdef void *context
-        cdef char *addr
+        cdef char *ipc_addr
+        cdef void *socket
 
-        context = (<ProcessorGroup>pg).out_context
-        socket = zmq_socket(context, ZMQ_DEALER)
+        ipc = b"ipc://server%i" % pg.get_batch()
+        ipc_addr = ipc
+        self.ipc_in_context = zmq_ctx_new()
+        socket = zmq_socket(self.ipc_in_context, ZMQ_DEALER)
         sprintf(identity, "%05i", self.batch)
         rc = zmq_setsockopt(socket, ZMQ_IDENTITY, identity, strlen(identity))
         if rc != 0:
@@ -113,10 +120,7 @@ cdef class ProcessorGroup:
         self.from_the_world[self.i] = socket
         if socket == NULL:
             raise Exception("zmq_socket(context, ZMQ_DEALER) no socket created")
-        a = b"inproc://server%i" % (<ProcessorGroup>pg).batch
-        addr = a
-        print(addr)
-        rc = zmq_connect(socket, addr)
+        rc = zmq_connect(socket, ipc_addr)
         if rc != 0:
             raise Exception("zmq_connect %i " % self.batch + zmq_strerror(zmq_errno()))
         self.i += 1
@@ -135,14 +139,12 @@ cdef class ProcessorGroup:
         cdef zmq_msg_t message
         cdef int more
         cdef int rc
-        cdef int num_from_the_world = 3
+        cdef int num_from_the_world = self.num_processes
         cdef int i
         cdef int erno
 
         with nogil:
             for i in prange(num_from_the_world):
-                with gil:
-                    print(i)
                 while True:
                     while True:
                         zmq_msg_init (&message);

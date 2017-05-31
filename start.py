@@ -9,7 +9,7 @@ class MyManager(BaseManager):
 def execute_wrapper(inp):
     return inp.execute()
 
-processes = 3
+processes = 10
 
 
 pool = mp.Pool(processes)
@@ -20,7 +20,7 @@ for i in range(processes):
     manager = MyManager()
     manager.start()
     managers.append(manager)
-    pg = ProcessorGroup(processes, batch=i, num_agents=670)  # !!!!!!!!!!!!!!!!!!!!!!!!
+    pg = manager.ProcessorGroup(batch=i, num_agents=500, num_processes=processes)  # !!!!!!!!!!!!!!!!!!!!!!!!
     _processor_groups.append(pg)
 
 print 'begin'
@@ -29,7 +29,7 @@ for x in _processor_groups:
         x.register_socket(y)
 
 print 'endbegin'
-#out = pool.map(execute_wrapper, _processor_groups, chunksize=1)
+out = pool.map(execute_wrapper, _processor_groups, chunksize=1)
 print('send:')
 st = timeit.default_timer()
 for pg in _processor_groups:
@@ -40,6 +40,6 @@ for pg in _processor_groups:
 print('recv:')
 for pg in _processor_groups:
     pg.recv()
-    print('wtf')
+
 print('timeit', timeit.default_timer() - st)
 print("end")
