@@ -1,7 +1,7 @@
 from processorgroup import ProcessorGroup
 import multiprocessing as mp
 from multiprocessing.managers import BaseManager
-
+import timeit
 
 class MyManager(BaseManager):
     pass
@@ -20,17 +20,26 @@ for i in range(processes):
     manager = MyManager()
     manager.start()
     managers.append(manager)
-    pg = manager.ProcessorGroup(processes, batch=i, num_agents=1000)
+    pg = ProcessorGroup(processes, batch=i, num_agents=670)  # !!!!!!!!!!!!!!!!!!!!!!!!
     _processor_groups.append(pg)
 
+print 'begin'
+for x in _processor_groups:
+    for y in _processor_groups:
+        x.register_socket(y)
 
-out = pool.map(execute_wrapper, _processor_groups, chunksize=1)
-
-
+print 'endbegin'
+#out = pool.map(execute_wrapper, _processor_groups, chunksize=1)
+print('send:')
+st = timeit.default_timer()
 for pg in _processor_groups:
     pg.send()
-
+print("messaging:")
 for pg in _processor_groups:
     pg.messaging()
-
-print("hend")
+print('recv:')
+for pg in _processor_groups:
+    pg.recv()
+    print('wtf')
+print('timeit', timeit.default_timer() - st)
+print("end")

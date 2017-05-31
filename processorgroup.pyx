@@ -16,107 +16,110 @@ ctypedef void zmq_free_fn(void *data, void *hint)
 
 cdef extern from "zmq.h" nogil:
     enum: ZMQ_ROUTER
+    enum: ZMQ_IDENTITY
     enum: ZMQ_IO_THREADS
     enum: ZMQ_SNDMORE
     enum: ZMQ_MAX_SOCKETS
     enum: ZMQ_SOCKET_LIMIT
+    enum: ZMQ_DEALER
+    enum: ZMQ_NOBLOCK
+    enum: EAGAIN
+
+    ctypedef void * zmq_msg_t "zmq_msg_t"
 
     int zmq_send (void *socket, void *buf, size_t len, int flags)
     void *zmq_ctx_new ()
     int zmq_ctx_set (void *context, int option, int optval)
+    int zmq_setsockopt (void *s, int option, void *optval, size_t optvallen)
     void *zmq_socket (void *context, int type)
     int zmq_bind (void *s, char *addr)
     int zmq_ctx_get (void *context, int option_name)
+    int zmq_msg_init (zmq_msg_t *msg)
+    int zmq_msg_recv (zmq_msg_t *msg, void *socket, int flags)
+    int zmq_msg_send (zmq_msg_t *msg, void *socket, int flags)
+    int zmq_msg_more (zmq_msg_t *message)
+    int zmq_msg_close (zmq_msg_t *msg)
+    int zmq_errno()
+    char* zmq_strerror(int errnum)
+    int zmq_connect (void *s, char *addr)
 
-cdef extern from "Python.h":  # python 3
-    int PY_MAJOR_VERSION
-
-    cdef enum:
-        PyBUF_SIMPLE
-        PyBUF_ANY_CONTIGUOUS
-    int  PyObject_CheckBuffer(object)
-    int  PyObject_GetBuffer(object, Py_buffer *, int) except -1
-    void PyBuffer_Release(Py_buffer *)
-
-    # int PyBuffer_FillInfo(Py_buffer *view, object obj, void *buf,
-    #             Py_ssize_t len, int readonly, int infoflags) except -1
-    # object PyMemoryView_FromBuffer(Py_buffer *info)
-
-    # object PyMemoryView_FromObject(object)
-
-cdef extern from "Python.h":  # python 2
-    ctypedef void const_void "const void"
-    Py_ssize_t Py_END_OF_BUFFER
-    int PyObject_CheckReadBuffer(object)
-    int PyObject_AsReadBuffer (object, const_void **, Py_ssize_t *) except -1
-    int PyObject_AsWriteBuffer(object, void **, Py_ssize_t *) except -1
-
-    object PyBuffer_FromMemory(void *ptr, Py_ssize_t s)
-    object PyBuffer_FromReadWriteMemory(void *ptr, Py_ssize_t s)
-
-    object PyBuffer_FromObject(object, Py_ssize_t offset, Py_ssize_t size)
-    object PyBuffer_FromReadWriteObject(object, Py_ssize_t offset, Py_ssize_t size)
-
-from cpython cimport PyBytes_Size, PyBytes_AsString
+#from cpython cimport PyBytes_Size, PyBytes_AsString
 
 
 cdef class ProcessorGroup:
-    cdef numpy.ndarray agents
-    cdef int num_processors
-    cdef int batch
-    cdef int _max_sockets
-    cdef void *sender
-    cdef void *context
-    cdef void **_sockets
-    cdef int num_agents
-
     def __init__(self, num_processors, batch, num_agents):
         cdef int rc
         cdef int io_threads = 1
-        cdef int socket_id = 0
+        cdef char identity [6]
+        cdef char *addr
+
+        self.i = 0
+
 
         self.num_processors = num_processors
         self.batch = batch
         self.num_agents = num_agents
 
         a = b"inproc://server%i" % batch
-        cdef char* addr = a
+        addr = a
 
-        self.context = zmq_ctx_new()
+        self.in_context = zmq_ctx_new()
+        self.out_context = zmq_ctx_new()
 
-        print('ZMQ_SOCKET_LIMIT', zmq_ctx_get(self.context, ZMQ_SOCKET_LIMIT))
+        print('ZMQ_SOCKET_LIMIT', zmq_ctx_get(self.in_context, ZMQ_SOCKET_LIMIT))
 
-        rc = zmq_ctx_set(self.context, ZMQ_IO_THREADS, 0)
+        rc = zmq_ctx_set(self.in_context, ZMQ_IO_THREADS, 0)
         assert rc == 0
-        rc = zmq_ctx_set(self.context, ZMQ_MAX_SOCKETS, 65530)
+        rc = zmq_ctx_set(self.in_context, ZMQ_MAX_SOCKETS, 65530)
         assert rc == 0
-        print('ZMQ_MAX_SOCKETS', zmq_ctx_get(self.context, ZMQ_MAX_SOCKETS))
-        self._max_sockets = 65530
+        rc = zmq_ctx_set(self.out_context, ZMQ_IO_THREADS, 0)
+        assert rc == 0
+        rc = zmq_ctx_set(self.out_context, ZMQ_MAX_SOCKETS, 65530)
+        assert rc == 0
 
-        self._sockets = <void **>malloc(self._max_sockets*sizeof(void *))
-        if self._sockets == NULL:
-            raise MemoryError("Could not allocate _sockets array")
-
-
-        self.sender = zmq_socket(self.context, ZMQ_ROUTER)
-        self._sockets[socket_id] = self.sender
-        socket_id += 1
-
-        while True:
-            rc = zmq_bind(self.sender, addr)
-            if rc != -1:
-                break
-        #self._pid = getpid()
+        self.in_from_the_world = zmq_socket(self.in_context, ZMQ_DEALER)
+        if self.in_from_the_world == NULL:
+            raise Exception("zmq_socket out_socket" + zmq_strerror(zmq_errno()))
+        print(self.batch)
+        sprintf(identity, "%05i", self.batch)
+        rc = zmq_setsockopt(self.in_from_the_world, ZMQ_IDENTITY, identity, strlen(identity))
+        if rc != 0:
+            raise Exception("zmq_setsockopt processor identity" + zmq_strerror(zmq_errno()))
+        rc = zmq_bind(self.in_from_the_world, addr)
+        assert rc == 0
+        self.out_socket = zmq_socket(self.out_context, ZMQ_ROUTER)
+        rc = zmq_bind(self.out_socket, addr)
+        assert rc == 0
 
         self.agents = numpy.empty(num_agents, dtype='object')
         #cdef CAgent agents
 
         for i in range(num_agents):
             agent = CAgent(i, batch)
-            socket = agent.register_socket(self.context)
-            self._sockets[socket_id] = socket
-            socket_id += 1
+            socket = agent.register_socket(self.in_context, self.out_socket)
             self.agents[i] = agent
+
+    def register_socket(self, pg):
+        cdef char identity [6]
+        cdef void *context
+        cdef char *addr
+
+        context = (<ProcessorGroup>pg).out_context
+        socket = zmq_socket(context, ZMQ_DEALER)
+        sprintf(identity, "%05i", self.batch)
+        rc = zmq_setsockopt(socket, ZMQ_IDENTITY, identity, strlen(identity))
+        if rc != 0:
+            raise Exception("zmq_setsockopt processor identity" + zmq_strerror(zmq_errno()))
+        self.from_the_world[self.i] = socket
+        if socket == NULL:
+            raise Exception("zmq_socket(context, ZMQ_DEALER) no socket created")
+        a = b"inproc://server%i" % (<ProcessorGroup>pg).batch
+        addr = a
+        print(addr)
+        rc = zmq_connect(socket, addr)
+        if rc != 0:
+            raise Exception("zmq_connect %i " % self.batch + zmq_strerror(zmq_errno()))
+        self.i += 1
 
     def execute(self):
         print("pg", self.batch)
@@ -124,35 +127,45 @@ cdef class ProcessorGroup:
         for agent in self.agents:
             agent.go()
 
-    cdef void send_(self, int id, int batch) nogil:
-        cdef int rc
-        cdef char name [10]
-        cdef int flags=0
-
-        sprintf(name, "%05i_%i", id, batch)
-
-        while True:
-            rc = zmq_send(self.sender, name, strlen(name), ZMQ_SNDMORE)
-            rc = zmq_send(self.sender, name, strlen(name), 0)
-            if rc != -1:
-                break
-
     def send(self):
-        print('begin - send', self.batch)
-        cdef int id
-        with nogil:
-            for id in prange(self.num_agents):
-               self.send_(id, self.batch)
-        print('end - send', self.batch)
+        for agent in self.agents:
+            agent.send()
 
     def messaging(self):
-        cdef int num_agents = len(self.agents)
+        cdef zmq_msg_t message
+        cdef int more
+        cdef int rc
+        cdef int num_from_the_world = 3
+        cdef int i
+        cdef int erno
+
+        with nogil:
+            for i in prange(num_from_the_world):
+                with gil:
+                    print(i)
+                while True:
+                    while True:
+                        zmq_msg_init (&message);
+                        rc = zmq_msg_recv (&message, self.from_the_world[i], ZMQ_NOBLOCK);
+                        more = zmq_msg_more (&message);
+                        zmq_msg_send (&message, self.in_from_the_world, ZMQ_SNDMORE if more else 0);
+                        zmq_msg_close (&message);
+                        if not more:
+                            break
+                    if rc == -1:
+                        erno = zmq_errno()
+                        if not erno == EAGAIN:
+                            with gil:
+                                raise Exception('messaging error ' + zmq_strerror(zmq_errno()))
+                        break
+    def recv(self):
         cdef void ** ptr= <void **> (self.agents.data)
         cdef int i
 
         with nogil:
-            for i in prange(num_agents):
-              (<CAgent>ptr[i]).messaging()
+            for i in prange(self.num_agents):
+              (<CAgent>ptr[i]).recv()
+
 
     def __del__(self):
         #self.receiver.close()
