@@ -75,13 +75,13 @@ cdef class ProcessorGroup:
         inproc = b"inproc://server%i" % batch
         inproc_addr = inproc
         self.in_context = zmq_ctx_new()
-        self.in_from_the_world = zmq_socket(self.in_context, ZMQ_DEALER)
-        if self.in_from_the_world == NULL:
+        self.device_to_agents = zmq_socket(self.in_context, ZMQ_DEALER)
+        if self.device_to_agents == NULL:
             raise Exception("zmq_socket out_socket" + zmq_strerror(zmq_errno()))
-        rc = zmq_setsockopt(self.in_from_the_world, ZMQ_IDENTITY, identity, strlen(identity))
+        rc = zmq_setsockopt(self.device_to_agents, ZMQ_IDENTITY, identity, strlen(identity))
         if rc != 0:
             raise Exception("zmq_setsockopt processor identity" + zmq_strerror(zmq_errno()))
-        rc = zmq_bind(self.in_from_the_world, inproc_addr)
+        rc = zmq_bind(self.device_to_agents, inproc_addr)
         assert rc == 0
 
 
@@ -150,7 +150,7 @@ cdef class ProcessorGroup:
                         zmq_msg_init (&message);
                         rc = zmq_msg_recv (&message, self.from_the_world[i], ZMQ_NOBLOCK);
                         more = zmq_msg_more (&message);
-                        zmq_msg_send (&message, self.in_from_the_world, ZMQ_SNDMORE if more else 0);
+                        zmq_msg_send (&message, self.device_to_agents, ZMQ_SNDMORE if more else 0);
                         zmq_msg_close (&message);
                         if not more:
                             break

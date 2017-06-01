@@ -13,7 +13,7 @@ cdef class ProcessorGroup:
     cdef void *out_socket
     cdef void *ipc_in_context
     cdef int num_agents
-    cdef void *in_from_the_world
+    cdef void *device_to_agents
     cdef void *to_the_world
     cdef void  *from_the_world [3]
 
